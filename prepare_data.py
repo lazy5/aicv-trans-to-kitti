@@ -137,7 +137,7 @@ def process_temp_dir(aicv_infos_dict, kitti_path):
         calib_file_path = os.path.join(temp_dir.name, 'params/params.txt')
         trans_calib_file(calib_file_path, aicv_infos_dict, sample_idx, kitti_path) # 处理相机和激光雷达内外参数据
         # label_file_path = os.path.join(temp_dir.name, 'params/params.txt')
-        trans_calib_file(aicv_infos_dict, sample_idx, kitti_path) # 处理label数据
+        trans_label_file(aicv_infos_dict, sample_idx, kitti_path) # 处理label数据
 
         temp_dir.cleanup()
         
