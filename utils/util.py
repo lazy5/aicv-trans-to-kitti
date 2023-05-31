@@ -119,7 +119,7 @@ def trans_lidar_to_pixel(lidar_points, calib_cam2lidar, calib_cam_K):
 def get_affine_matrix_inv(affine_matrix):
     """ 从一个仿射矩阵获得其逆变换的矩阵
     affine_matrix: np.array(3, 4), [R, T], 3*4的矩阵，R为旋转矩阵，T为平移矩阵
-
+    affine_inv: np.array(3, 4), 仿射变换的逆变换矩阵
     """
     rotation = affine_matrix[:3, :3]
     translation = affine_matrix[:3, 3]
@@ -130,78 +130,123 @@ def get_affine_matrix_inv(affine_matrix):
     return affine_inv
 
 
-class AicvCalibration(object):
-    """ aicv数据集中的标注参数 """
-    def __init__(self, aicv_calib_file_path, cam_name):
-        # self.parse_aicv_calib_file(aicv_calib_file_path)
-        self.aicv_calib_file_path = aicv_calib_file_path
-        self.cam_name = cam_name
-        self.cam2lidar = 0
-        self.lidar2cam = 0
-        self.cam_K = 0
-        self.kitti_calib_param = [
-            'P0: 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0',
-            'P1: 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0',
-            'R_rect 1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0',
-            'Tr_imu_velo 1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0'
-            ]
-        pass
+def trans_pts_by_affine(pts, affine_matrix):
+    """ 根据仿射函数对点进行转换
+    pts: np.array(N, 3), 待变换的点，N表示点的个数
+    affine_matrix: np.array(3, 4), [R, T], 3*4的矩阵，R为旋转矩阵，T为平移矩阵
+    """
+    rotation_matrix = rotation = affine_matrix[:3, :3]
+    translation = affine_matrix[:3, 3]
 
-    def project_lidar_to_cam(self, pts_lidar):
-        pts_cam = trans_lidar_to_cam(pts_lidar, self.lidar2cam)
-        return pts_cam
+    trans_points = np.dot(rotation_matrix, pts.T - translation[:, np.newaxis])
+    trans_points = trans_points.T # (3, N) -> (N, 3)
+    return trans_points
+
+
+def matrix_to_string(matrix):
+    ss = list(matrix.reshape(-1))
+    ss = list(map(str, ss))
+    return ' '.join(ss)
+
+class AicvCalibration(object):
+    """ aicv数据集中的标注参数 
+    cam_K: np.array(3,3) 相机内参矩阵
+    cam2lidar: np.array(3,4) 相机坐标系到lidar坐标系的变换矩阵
+    lidar2cam: np.array(3,4) lidar坐标系到相机坐标系的变换矩阵
+    """
+    def __init__(self, aicv_calib_file_path, cam_name):
+        self.aicv_cam_name = cam_name
+        self._parse_aicv_calib_file(aicv_calib_file_path)
     
-    def read_aicv_calib_file(self):
-        param_txt = open(self.aicv_calib_file_path, 'r')
+    def read_aicv_calib_file(self, aicv_calib_file_path):
+        """ 读取aicv数据的param.txt文件 """
+        param_txt = open(aicv_calib_file_path, 'r')
         param = param_txt.read().splitlines()
         return param
     
-    def make_cam_extrinsic(self, param):
-        extrinsic_key = 'calib_' + self.cam_name + '_to_at128_fusion'
-        for line in param:
-            if extrinsic_key in line:
-                extrinsic_line = line
-                break
-        # print(extrinsic_line)
-        extrinsic_line = extrinsic_line.split(' ')
-        translation = [float(e) for e in extrinsic_line[1:4]]
-        quaternion = [float(e) for e in extrinsic_line[4:]]
-        # print(translation)
-        # print(quaternion)
-        cam2lidar_R = Rotation.from_quat(quaternion)
-        cam2lidar_R = cam2lidar_R.as_matrix()
-        cam2lidar_T = np.array(translation)
-
-        lidar2cam_R = np.linalg.inv(cam2lidar_R)
-        lidar2cam_T = -np.dot(lidar2cam_R, cam2lidar_T[:, None])
-        
-        # print(lidar2cam_R)
-        # print(lidar2cam_T)
-        lidar2cam = np.hstack((lidar2cam_R, lidar2cam_T))
-        lidar2cam = lidar2cam.reshape((-1, 1))
-        lidar2cam = np.squeeze(lidar2cam)
-        # print(lidar2cam)
-        string = 'Tr_velo_cam: '
-        for i in range(lidar2cam.shape[0]):
-            string += str(lidar2cam[i]) + ' '
-        # print(string)
-        return string
-    
-    def make_cam_intrinsic(self, param):
-        intrinsic_key = self.cam_name + '_K'
+    def _parse_cam_K(self, param):
+        """ 解析aicv的params.txt文件, 获取相机内参矩阵cam_K 
+        cam_K: np.array(3,3) 相机内参矩阵
+        """
+        intrinsic_key = self.aicv_cam_name + '_K'
         for line in param:
             if intrinsic_key in line:
                 intrinsic_line = line
                 break
-        intrinsic_line = intrinsic_line.split(' ')
-        string = 'P2: '
-        for i in range(1, len(intrinsic_line)):
-            string += intrinsic_line[i] + ' '
-        return string
-    
-    def write_to_kitti_calib_file(self, txt, kitti_calib_file_path):
-        # path = os.path.join(kitti_calib_file_path)
-        f = open(kitti_calib_file_path, 'w')
-        for t in txt:
-            f.write(t + '\n')
-    
+        intrinsic_line = intrinsic_line.split(' ')[1:]
+        intrinsic_line = list(map(float, intrinsic_line))
+        cam_K = np.array(intrinsic_line).reshape(3,3)
+        return cam_K
+
+    def _parse_cam2lidar(self, param):
+        """ 解析aicv的params.txt文件, 获取相机外参矩阵cam2lidar
+
+        """
+        extrinsic_key = 'calib_' + self.aicv_cam_name + '_to_at128_fusion'
+        for line in param:
+            if extrinsic_key in line:
+                extrinsic_line = line
+                break
+        extrinsic_line = extrinsic_line.split(' ')
+        translation = [float(e) for e in extrinsic_line[1:4]]
+        quaternion = [float(e) for e in extrinsic_line[4:]]
+
+        rotation_matrix = quaternion_to_rotation_matrix(quaternion)
+        translation_matrix = np.array(translation)[:, np.newaxis]
+
+        cam2lidar = np.concatenate((rotation_matrix, translation_matrix), axis=1)
+        return cam2lidar
+
+    def _parse_aicv_calib_file(self, aicv_calib_file_path):
+        param = self.read_aicv_calib_file(aicv_calib_file_path)
+        self.cam_K = self._parse_cam_K(param)
+        self.cam2lidar = self._parse_cam2lidar(param)
+        self.lidar2cam = get_affine_matrix_inv(self.cam2lidar)
+
+    def write_to_kitti_calib_file(self, kitti_calib_file_path):
+        """ 将参数写成kitti格式的文件 """
+        kitti_calib_param = [
+            'P0: 1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0',
+            'P1: 1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0',
+            'R_rect 1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0',
+            'Tr_imu_velo 1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0'
+            ]
+        # 把内参矩阵P2写入kitti-calib格式文件
+        kitti_cam_intrinsic = np.concatenate((self.cam_K, np.zeros((3, 1))), axis=1)
+        kitti_cam_intrinsic_string = matrix_to_string(kitti_cam_intrinsic)
+        kitti_cam_intrinsic_string = 'P2: ' + kitti_cam_intrinsic_string
+        kitti_calib_param.insert(2, kitti_cam_intrinsic_string)
+
+        # 把内参矩阵P3写入kitti-calib格式文件，与P2一致
+        kitti_cam_intrinsic_string = kitti_cam_intrinsic_string.replace('P2:', 'P3:')
+        kitti_calib_param.insert(3, kitti_cam_intrinsic_string)
+
+        # 把Tr_velo_cam写入kitti-calib格式文件
+        kitti_tr_velo_cam_string = matrix_to_string(self.lidar2cam)
+        kitti_tr_velo_cam_string = 'Tr_velo_cam ' + kitti_tr_velo_cam_string
+        kitti_calib_param.insert(5, kitti_tr_velo_cam_string)
+
+        with open(kitti_calib_file_path, 'w') as f:
+            for line in kitti_calib_param:
+                f.write(line + '\n')
+
+    # ===========================
+    # ------- 3d to 3d ----------
+    # ===========================
+    def project_lidar_to_cam(self, pts_lidar):
+        pts_cam = trans_pts_by_affine(pts_lidar, self.lidar2cam)
+        return pts_cam
+
+    def project_cam_to_lidar(self, pts_cam):
+        pts_lidar = trans_pts_by_affine(pts_cam, self.cam2lidar)
+        return pts_lidar
+
+    # ===========================
+    # ------- 3d to 2d ----------
+    # ===========================
+    def project_lidar_to_pixel(self, pts_lidar):
+        pass
+
+        
+        
+
