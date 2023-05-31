@@ -132,7 +132,8 @@ def get_affine_matrix_inv(affine_matrix):
 
 class AicvCalibration(object):
     """ aicv数据集中的标注参数 """
-    def __init__(self):
+    def __init__(self, aicv_calib_file_path):
+        self.parse_aicv_calib_file(aicv_calib_file_path)
         self.cam2lidar = 0
         self.lidar2cam = 0
         self.cam_K = 0
@@ -141,4 +142,10 @@ class AicvCalibration(object):
     def project_lidar_to_cam(self, pts_lidar):
         pts_cam = trans_lidar_to_cam(pts_lidar, self.lidar2cam)
         return pts_cam
+    
+    def parse_aicv_calib_file(aicv_calib_file_path):
+        pass
+    
+    def write_to_kitti_calib_file(self, kitti_calib_file_path):
+        pass
     

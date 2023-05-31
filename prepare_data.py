@@ -15,7 +15,7 @@ import concurrent.futures as futures
 import pandas as pd
 import numpy as np
 
-from utils.util import load_pcd, reg_radian
+from utils.util import load_pcd, reg_radian, AicvCalibration
 from utils.kitti_util import boxes_to_corners_3d
 
 
@@ -97,7 +97,14 @@ def trans_label_file(aicv_infos_dict, sample_idx, kitti_path):
     pass
 
 
-def trans_calib_file():
+def trans_calib_file(calib_file_path, aicv_infos_dict, sample_idx, kitti_path):
+    kitti_calib_file_path = os.path.join(kitti_path, 'calib/0001.txt')
+
+    # 解析aicv文件，输出一个kitti-mot格式文件
+    AicvCalibration(calib_file_path)
+
+
+
     pass
 
 
