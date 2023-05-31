@@ -73,8 +73,11 @@ def trans_label_file(aicv_infos_dict, sample_idx, kitti_path):
 
     # 获取bbox
     bbox_3d = aicv_info['gt_boxes']
-    corners_3d = boxes_to_corners_3d(bbox_3d)
-    corners_2d = aicv_calibration.project_lidar_to_cam(corners_3d)
+    corners_3d = boxes_to_corners_3d(bbox_3d) # corners_3d: np.array(N ,8, 3)
+    print('corners_3d', corners_3d.shape)
+    # corners_3d = corners_3d.reshape((-1, 3))
+    # corners_2d = aicv_calibration.project_lidar_to_cam(corners_3d) # 
+    return
     # bbox_2d = 
 
 
@@ -94,16 +97,14 @@ def trans_label_file(aicv_infos_dict, sample_idx, kitti_path):
         #            bbox_i, dimensions_i, location_i, rotation_y_i, score_i)
 
 
-    pass
-
-
 def trans_calib_file(calib_file_path, aicv_infos_dict, sample_idx, kitti_path):
     kitti_calib_file_path = os.path.join(kitti_path, 'calib/0001.txt')
     mkdir(kitti_calib_file_path)
-    
+
     # 解析aicv文件，输出一个kitti-mot格式文件
     aicv_calib = AicvCalibration(calib_file_path, 'obstacle')
     aicv_calib.write_to_kitti_calib_file(kitti_calib_file_path)
+    aicv_infos_dict[sample_idx]['calibration'] = aicv_calib
 
 
 def trans_oxts_file():
@@ -156,14 +157,14 @@ def process_temp_dir(aicv_infos_dict, kitti_path):
         # print(os.listdir(os.path.join(temp_dir.name, 'velodyne_points')))
 
         # 处理临时文件夹中的文件
-        # pcd_file_path = os.path.join(temp_dir.name, 'velodyne_points/at128_fusion.pcd')
-        # trans_lidar_file(pcd_file_path, aicv_infos_dict, sample_idx, kitti_path) # 处理lidar数据
-        # img_file_path = os.path.join(temp_dir.name, 'images/obstacle/image.jpg')
-        # trans_img_file(img_file_path, aicv_infos_dict, sample_idx, kitti_path) # 处理图像数据
+        pcd_file_path = os.path.join(temp_dir.name, 'velodyne_points/at128_fusion.pcd')
+        trans_lidar_file(pcd_file_path, aicv_infos_dict, sample_idx, kitti_path) # 处理lidar数据
+        img_file_path = os.path.join(temp_dir.name, 'images/obstacle/image.jpg')
+        trans_img_file(img_file_path, aicv_infos_dict, sample_idx, kitti_path) # 处理图像数据
         calib_file_path = os.path.join(temp_dir.name, 'params/params.txt')
         trans_calib_file(calib_file_path, aicv_infos_dict, sample_idx, kitti_path) # 处理相机和激光雷达内外参数据
         # label_file_path = os.path.join(temp_dir.name, 'params/params.txt')
-        # trans_label_file(aicv_infos_dict, sample_idx, kitti_path) # 处理label数据
+        trans_label_file(aicv_infos_dict, sample_idx, kitti_path) # 处理label数据
 
         temp_dir.cleanup()
         

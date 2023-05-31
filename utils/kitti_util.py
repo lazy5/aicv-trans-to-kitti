@@ -856,6 +856,7 @@ def boxes_to_corners_3d(boxes3d):
         boxes3d:  (N, 7) [x, y, z, dx, dy, dz, heading], (x, y, z) is the box center
 
     Returns:
+        corners3d: np.array(N, 8, 3)
     """
     template = np.array((
         [1, 1, -1], [1, -1, -1], [-1, -1, -1], [-1, 1, -1],
