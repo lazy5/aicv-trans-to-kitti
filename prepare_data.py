@@ -75,8 +75,6 @@ def trans_label_file(aicv_infos_dict, sample_idx, kitti_path):
     bbox_3d = aicv_info['gt_boxes']
     corners_3d = boxes_to_corners_3d(bbox_3d) # corners_3d: np.array(N ,8, 3)
     print('corners_3d', corners_3d.shape)
-    # corners_3d = corners_3d.reshape((-1, 3))
-    # corners_2d = aicv_calibration.project_lidar_to_cam(corners_3d) # 
     return
     # bbox_2d = 
 
