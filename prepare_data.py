@@ -15,7 +15,8 @@ import concurrent.futures as futures
 import pandas as pd
 import numpy as np
 
-from utils.util import load_pcd
+from utils.util import load_pcd, reg_radian
+from utils.kitti_util import boxes_to_corners_3d
 
 
 def mkdir(path):
@@ -62,15 +63,35 @@ def trans_label_file(aicv_infos_dict, sample_idx, kitti_path):
         lidar_file_path
         image_file_path
     """
-    aicv_info = aicv_infos_dict[idx]
+    aicv_info = aicv_infos_dict[sample_idx]
+    aicv_calibration = aicv_info['calibration']
     frame = sample_idx
+
+    # 对于aicv数据中的location，将lidar坐标系下的标注转化为camera坐标系
+    aicv_location = aicv_info['gt_boxes'][:, :3]
+    kitti_location = aicv_calibration.project_lidar_to_cam(aicv_location)
+
+    # 获取bbox
+    bbox_3d = aicv_info['gt_boxes']
+    corners_3d = boxes_to_corners_3d(bbox_3d)
+    corners_2d = aicv_calibration.project_lidar_to_cam(corners_3d)
+    # bbox_2d = 
+
+
     for i in range(len(aicv_info['trackId'])):
+        # 获取在camera坐标系下的bbox
         track_id_i = aicv_info['trackId'][i]
         type_i = aicv_info['gt_names'][i]
         truncated_i = 0 # tips: 表示了目标检测的截断情况，此处设置为0，全部不截断，该参数对nerf应该没有影响
-        occluded = 0 #tips: 表示该障碍物是否可见，0全部可见，1部分遮挡，2大部分遮挡，3不清楚
-        alpha = 0 # TODO: 该值表示障碍物的观测角，对nerf无用
-        # bbox = 
+        occluded_i = 0 #tips: 表示该障碍物是否可见，0全部可见，1部分遮挡，2大部分遮挡，3不清楚
+        alpha_i = 0 # TODO: 该值表示障碍物的观测角，对nerf无用
+        # bbox_i = 
+        # dimensions_i = 
+        # location_i = 
+        # rotation_y_i = 
+        # score_i = 1
+        # write_line(frame, track_id_i, type_i, truncated_i, occluded_i, alpha_i, 
+        #            bbox_i, dimensions_i, location_i, rotation_y_i, score_i)
 
 
     pass
@@ -167,9 +188,6 @@ def tran_aicv_to_kitti_pipline(root_path, kitti_path):
 
     #     temp_dir.cleanup()
     #     break
-
-
-
 
 
 if __name__ == '__main__':
