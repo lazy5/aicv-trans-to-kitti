@@ -132,20 +132,76 @@ def get_affine_matrix_inv(affine_matrix):
 
 class AicvCalibration(object):
     """ aicv数据集中的标注参数 """
-    def __init__(self, aicv_calib_file_path):
-        self.parse_aicv_calib_file(aicv_calib_file_path)
+    def __init__(self, aicv_calib_file_path, cam_name):
+        # self.parse_aicv_calib_file(aicv_calib_file_path)
+        self.aicv_calib_file_path = aicv_calib_file_path
+        self.cam_name = cam_name
         self.cam2lidar = 0
         self.lidar2cam = 0
         self.cam_K = 0
+        self.kitti_calib_param = [
+            'P0: 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0',
+            'P1: 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0',
+            'R_rect 1.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 1.0',
+            'Tr_imu_velo 1.0 0.0 0.0 0.0 0.0 1.0 0.0 0.0 0.0 0.0 1.0 0.0'
+            ]
         pass
 
     def project_lidar_to_cam(self, pts_lidar):
         pts_cam = trans_lidar_to_cam(pts_lidar, self.lidar2cam)
         return pts_cam
     
-    def parse_aicv_calib_file(aicv_calib_file_path):
-        pass
+    def read_aicv_calib_file(self):
+        param_txt = open(self.aicv_calib_file_path, 'r')
+        param = param_txt.read().splitlines()
+        return param
     
-    def write_to_kitti_calib_file(self, kitti_calib_file_path):
-        pass
+    def make_cam_extrinsic(self, param):
+        extrinsic_key = 'calib_' + self.cam_name + '_to_at128_fusion'
+        for line in param:
+            if extrinsic_key in line:
+                extrinsic_line = line
+                break
+        # print(extrinsic_line)
+        extrinsic_line = extrinsic_line.split(' ')
+        translation = [float(e) for e in extrinsic_line[1:4]]
+        quaternion = [float(e) for e in extrinsic_line[4:]]
+        # print(translation)
+        # print(quaternion)
+        cam2lidar_R = Rotation.from_quat(quaternion)
+        cam2lidar_R = cam2lidar_R.as_matrix()
+        cam2lidar_T = np.array(translation)
+
+        lidar2cam_R = np.linalg.inv(cam2lidar_R)
+        lidar2cam_T = -np.dot(lidar2cam_R, cam2lidar_T[:, None])
+        
+        # print(lidar2cam_R)
+        # print(lidar2cam_T)
+        lidar2cam = np.hstack((lidar2cam_R, lidar2cam_T))
+        lidar2cam = lidar2cam.reshape((-1, 1))
+        lidar2cam = np.squeeze(lidar2cam)
+        # print(lidar2cam)
+        string = 'Tr_velo_cam: '
+        for i in range(lidar2cam.shape[0]):
+            string += str(lidar2cam[i]) + ' '
+        # print(string)
+        return string
+    
+    def make_cam_intrinsic(self, param):
+        intrinsic_key = self.cam_name + '_K'
+        for line in param:
+            if intrinsic_key in line:
+                intrinsic_line = line
+                break
+        intrinsic_line = intrinsic_line.split(' ')
+        string = 'P2: '
+        for i in range(1, len(intrinsic_line)):
+            string += intrinsic_line[i] + ' '
+        return string
+    
+    def write_to_kitti_calib_file(self, txt, kitti_calib_file_path):
+        # path = os.path.join(kitti_calib_file_path)
+        f = open(kitti_calib_file_path, 'w')
+        for t in txt:
+            f.write(t + '\n')
     
