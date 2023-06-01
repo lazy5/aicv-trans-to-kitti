@@ -19,6 +19,17 @@ import numpy as np
 from utils.util import load_pcd, reg_radian, AicvCalibration, box3d_pts_2d_to_bbox_2d
 from utils.kitti_util import boxes_to_corners_3d
 
+aicv_to_kitti_label_map = {
+    'smallMot': 'Car',
+    'bigMot': 'Truck',
+    'Tricyclist': 'Cyclist',
+    'OnlyTricycle': 'Cyclist',
+    'bicyclist': 'Cyclist',
+    'OnlyBicycle': 'Cyclist',
+    'motorcyclist': 'Cyclist',
+    'pedestrian': 'Pedestrian',
+}
+
 
 def mkdir(path):
     file_dir = os.path.dirname(path)
@@ -89,18 +100,23 @@ def trans_label_file(aicv_infos_dict, sample_idx, kitti_path):
             for i in range(len(aicv_info['trackId'])): # i表示当前帧的第i个障碍物
                 # 获取在camera坐标系下的bbox
                 track_id_i = aicv_info['trackId'][i]
-                type_i = aicv_info['gt_names'][i]
+                type_i = aicv_to_kitti_label_map[aicv_info['gt_names'][i]] if aicv_info['gt_names'][i] in aicv_to_kitti_label_map else 'DontCare'
+                # type_i = aicv_info['gt_names'][i]
                 truncated_i = 0 # tips: 表示了目标检测的截断情况，此处设置为0，全部不截断，该参数对nerf应该没有影响
                 occluded_i = 0 #tips: 表示该障碍物是否可见，0全部可见，1部分遮挡，2大部分遮挡，3不清楚
                 alpha_i = 0 # TODO: 该值表示障碍物的观测角，对nerf无用
                 bbox_i = [0, 0, 0, 0]
-                dimensions_i = aicv_info['gt_boxes'][i, 3:6]
-                location_i = kitti_location[i]
-                rotation_y_i = reg_radian(aicv_info['gt_boxes'][i, 6])
+                dimensions_i = aicv_info['gt_boxes'][i, (5,3,4)] # aicv: lwh -> kitti:hwl ???
+                h = aicv_info['gt_boxes'][i, 5]
+                location_i = kitti_location[i] + np.array([0, h / 2, 0]) # aicv: 3d框的中心点坐标 -> kitti: 3d框的底面中心点坐标
+                # location_i = kitti_location[i]
+                # print('location_i', location_i.shape)
+                rotation_y_i = - reg_radian(aicv_info['gt_boxes'][i, 6]) # ???
                 score_i = 1
                 write_line(f_kitti_label_file, frame_idx, track_id_i, type_i, truncated_i, occluded_i, alpha_i, 
                         bbox_i, dimensions_i, location_i, rotation_y_i, score_i)
     aicv_infos_dict[sample_idx]['label_file_path'] = kitti_label_file_path
+
 
 def trans_calib_file(calib_file_path, aicv_infos_dict, sample_idx, kitti_path):
     kitti_calib_file_path = os.path.join(kitti_path, 'calib/0001.txt')
