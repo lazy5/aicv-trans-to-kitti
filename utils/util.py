@@ -148,6 +148,28 @@ def matrix_to_string(matrix):
     ss = list(map(str, ss))
     return ' '.join(ss)
 
+
+def box3d_pts_2d_to_bbox_2d(box3d_pts_2d):
+    """ 将2d图像上的3d框转化到2dbbox
+    box3d_pts_2d: np.array(N, 8, 2) 在图像上障碍物的N个框，每个框8个角点，
+    bbox_2d: np.array(N, 4) 在图像上N个2d框[x_min, y_min, x_max, y_max]
+    """
+    # 提取立体框的每个顶点的坐标
+    x = box3d_pts_2d[:, :, 0]
+    y = box3d_pts_2d[:, :, 1]
+
+    # 计算2D边界框的坐标
+    x_min = np.min(x, axis=1)
+    y_min = np.min(y, axis=1)
+    x_max = np.max(x, axis=1)
+    y_max = np.max(y, axis=1)
+
+    # 组合2D边界框的坐标为数组
+    bbox_2d = np.stack((x_min, y_min, x_max, y_max), axis=1)
+
+    return bbox_2d
+
+
 class AicvCalibration(object):
     """ aicv数据集中的标注参数 
     cam_K: np.array(3,3) 相机内参矩阵
@@ -160,8 +182,8 @@ class AicvCalibration(object):
     
     def read_aicv_calib_file(self, aicv_calib_file_path):
         """ 读取aicv数据的param.txt文件 """
-        param_txt = open(aicv_calib_file_path, 'r')
-        param = param_txt.read().splitlines()
+        with open(aicv_calib_file_path, 'r') as param_txt:
+            param = param_txt.read().splitlines()
         return param
     
     def _parse_cam_K(self, param):

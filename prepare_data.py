@@ -4,6 +4,7 @@
 Author: fangchenyu
 Date: 2023.5.30
 """
+from ast import Num
 import os
 import tempfile
 import zipfile
@@ -15,7 +16,7 @@ import concurrent.futures as futures
 import pandas as pd
 import numpy as np
 
-from utils.util import load_pcd, reg_radian, AicvCalibration
+from utils.util import load_pcd, reg_radian, AicvCalibration, box3d_pts_2d_to_bbox_2d
 from utils.kitti_util import boxes_to_corners_3d
 
 
@@ -35,6 +36,16 @@ def extract_zip_to_temp(zip_file_path):
 
     # 返回临时文件夹的路径
     return temp_dir
+
+
+def write_line(f, frame_idx, track_id_i, type_i, truncated_i, occluded_i, alpha_i, 
+               bbox_i, dimensions_i, location_i, rotation_y_i, score_i):
+    line = f'{int(frame_idx)} {int(track_id_i)} {type_i} {truncated_i} {occluded_i} {alpha_i} \
+{bbox_i[0]} {bbox_i[1]} {bbox_i[2]} {bbox_i[3]} \
+{dimensions_i[0]} {dimensions_i[1]} {dimensions_i[2]} \
+{location_i[0]} {location_i[1]} {location_i[2]} \
+{rotation_y_i} {score_i}'
+    f.write(line + '\n')
 
 
 def trans_lidar_file(file_path, aicv_infos_dict, idx, kitti_path):
@@ -63,37 +74,33 @@ def trans_label_file(aicv_infos_dict, sample_idx, kitti_path):
         lidar_file_path
         image_file_path
     """
-    aicv_info = aicv_infos_dict[sample_idx]
-    aicv_calibration = aicv_info['calibration']
-    frame = sample_idx
+    kitti_label_file_path = os.path.join(kitti_path, 'label_02/0001.txt')
+    mkdir(kitti_label_file_path)
 
-    # 对于aicv数据中的location，将lidar坐标系下的标注转化为camera坐标系
-    aicv_location = aicv_info['gt_boxes'][:, :3]
-    kitti_location = aicv_calibration.project_lidar_to_cam(aicv_location)
+    # 获取该段场景的calibration
+    aicv_calibration = aicv_infos_dict[sample_idx]['calibration']
 
-    # 获取bbox
-    bbox_3d = aicv_info['gt_boxes']
-    corners_3d = boxes_to_corners_3d(bbox_3d) # corners_3d: np.array(N ,8, 3)
-    print('corners_3d', corners_3d.shape)
-    return
-    # bbox_2d = 
+    with open(kitti_label_file_path, 'w') as f_kitti_label_file:
+        for frame_idx, aicv_info in enumerate(aicv_infos_dict): # frame_idx表示帧序号
+            # 对于aicv数据中的location，将lidar坐标系下的标注转化为camera坐标系
+            aicv_location = aicv_info['gt_boxes'][:, :3]
+            kitti_location = aicv_calibration.project_lidar_to_cam(aicv_location)
 
-
-    for i in range(len(aicv_info['trackId'])):
-        # 获取在camera坐标系下的bbox
-        track_id_i = aicv_info['trackId'][i]
-        type_i = aicv_info['gt_names'][i]
-        truncated_i = 0 # tips: 表示了目标检测的截断情况，此处设置为0，全部不截断，该参数对nerf应该没有影响
-        occluded_i = 0 #tips: 表示该障碍物是否可见，0全部可见，1部分遮挡，2大部分遮挡，3不清楚
-        alpha_i = 0 # TODO: 该值表示障碍物的观测角，对nerf无用
-        # bbox_i = 
-        # dimensions_i = 
-        # location_i = 
-        # rotation_y_i = 
-        # score_i = 1
-        # write_line(frame, track_id_i, type_i, truncated_i, occluded_i, alpha_i, 
-        #            bbox_i, dimensions_i, location_i, rotation_y_i, score_i)
-
+            for i in range(len(aicv_info['trackId'])): # i表示当前帧的第i个障碍物
+                # 获取在camera坐标系下的bbox
+                track_id_i = aicv_info['trackId'][i]
+                type_i = aicv_info['gt_names'][i]
+                truncated_i = 0 # tips: 表示了目标检测的截断情况，此处设置为0，全部不截断，该参数对nerf应该没有影响
+                occluded_i = 0 #tips: 表示该障碍物是否可见，0全部可见，1部分遮挡，2大部分遮挡，3不清楚
+                alpha_i = 0 # TODO: 该值表示障碍物的观测角，对nerf无用
+                bbox_i = [0, 0, 0, 0]
+                dimensions_i = aicv_info['gt_boxes'][i, 3:6]
+                location_i = kitti_location[i]
+                rotation_y_i = reg_radian(aicv_info['gt_boxes'][i, 6])
+                score_i = 1
+                write_line(f_kitti_label_file, frame_idx, track_id_i, type_i, truncated_i, occluded_i, alpha_i, 
+                        bbox_i, dimensions_i, location_i, rotation_y_i, score_i)
+    aicv_infos_dict[sample_idx]['label_file_path'] = kitti_label_file_path
 
 def trans_calib_file(calib_file_path, aicv_infos_dict, sample_idx, kitti_path):
     kitti_calib_file_path = os.path.join(kitti_path, 'calib/0001.txt')
@@ -105,8 +112,10 @@ def trans_calib_file(calib_file_path, aicv_infos_dict, sample_idx, kitti_path):
     aicv_infos_dict[sample_idx]['calibration'] = aicv_calib
 
 
-def trans_oxts_file():
-    pass
+def trans_oxts_file(pose_file_path, aicv_infos_dict, sample_idx, kitti_path):
+    with open(pose_file_path, 'r') as aicv_file:
+        line = aicv_file.read().strip().replace('\t', ' ')
+    aicv_infos_dict[sample_idx]['pose'] = line
 
 
 def parse_aicv_anno(anno_infos, root_path, num_workers=16):
@@ -147,7 +156,7 @@ def parse_aicv_anno(anno_infos, root_path, num_workers=16):
     return list(infos)
 
 
-def process_temp_dir(aicv_infos_dict, kitti_path):
+def process_temp_dir(aicv_infos_dict, kitti_path, num_workers=16):
     def process_single_frame(sample_idx):
         zip_file_path = aicv_infos_dict[sample_idx]['zip_file_path']
         temp_dir = extract_zip_to_temp(zip_file_path)
@@ -159,14 +168,28 @@ def process_temp_dir(aicv_infos_dict, kitti_path):
         trans_lidar_file(pcd_file_path, aicv_infos_dict, sample_idx, kitti_path) # 处理lidar数据
         img_file_path = os.path.join(temp_dir.name, 'images/obstacle/image.jpg')
         trans_img_file(img_file_path, aicv_infos_dict, sample_idx, kitti_path) # 处理图像数据
-        calib_file_path = os.path.join(temp_dir.name, 'params/params.txt')
-        trans_calib_file(calib_file_path, aicv_infos_dict, sample_idx, kitti_path) # 处理相机和激光雷达内外参数据
-        # label_file_path = os.path.join(temp_dir.name, 'params/params.txt')
-        trans_label_file(aicv_infos_dict, sample_idx, kitti_path) # 处理label数据
+        pose_file_path = os.path.join(temp_dir.name, 'velodyne_points/pose.txt')
+        trans_oxts_file(pose_file_path, aicv_infos_dict, sample_idx, kitti_path)
+        if sample_idx == 0: # 对于标定文件和label文件，将输出单个整合文件
+            calib_file_path = os.path.join(temp_dir.name, 'params/params.txt')
+            trans_calib_file(calib_file_path, aicv_infos_dict, sample_idx, kitti_path) # 处理相机和激光雷达内外参数据
+            trans_label_file(aicv_infos_dict, sample_idx, kitti_path) # 处理label数据
 
         temp_dir.cleanup()
         
-    process_single_frame(0) # debug: 测试单帧数据处理过程
+    # process_single_frame(0) # debug: 测试单帧数据处理过程
+    sample_id_list = list(range(len(aicv_infos_dict)))
+    with futures.ThreadPoolExecutor(num_workers) as executor:
+        executor.map(process_single_frame, sample_id_list)
+        # infos = executor.map(process_single_frame, sample_id_list)
+
+    # 将pose信息写入文件
+    kitti_oxts_file_path = os.path.join(kitti_path, 'oxts/0001.txt')
+    mkdir(kitti_oxts_file_path)
+    with open(kitti_oxts_file_path, 'w') as kitti_file:
+        for i, aicv_info in enumerate(aicv_infos_dict):
+            pose_line = aicv_infos_dict[i]['pose']
+            kitti_file.write(pose_line + '\n')
 
 
 def tran_aicv_to_kitti_pipline(root_path, kitti_path):
@@ -179,19 +202,7 @@ def tran_aicv_to_kitti_pipline(root_path, kitti_path):
     aicv_infos_dict = parse_aicv_anno(aicv_infos, root_path)
     print(len(aicv_infos_dict))
 
-
     process_temp_dir(aicv_infos_dict, kitti_path)
-    # # 解压文件
-    # for idx, aicv_anno in enumerate(aicv_infos_dict):
-    #     zip_file_path = aicv_anno['zip_file_path']
-    #     # zip_file_path = aicv_infos_dict[idx]['zip_file_path']
-    #     temp_dir = extract_zip_to_temp(zip_file_path)
-    #     # print(temp_dir.name)
-    #     # print(os.listdir(temp_dir.name))
-
-
-    #     temp_dir.cleanup()
-    #     break
 
 
 if __name__ == '__main__':
