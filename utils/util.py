@@ -135,12 +135,23 @@ def trans_pts_by_affine(pts, affine_matrix):
     pts: np.array(N, 3), 待变换的点，N表示点的个数
     affine_matrix: np.array(3, 4), [R, T], 3*4的矩阵，R为旋转矩阵，T为平移矩阵
     """
-    rotation_matrix = rotation = affine_matrix[:3, :3]
+    rotation_matrix = affine_matrix[:3, :3]
     translation = affine_matrix[:3, 3]
 
-    trans_points = np.dot(rotation_matrix, pts.T - translation[:, np.newaxis])
+    trans_points = np.dot(rotation_matrix, pts.T) + translation[:, np.newaxis]
     trans_points = trans_points.T # (3, N) -> (N, 3)
     return trans_points
+
+
+def trans_heading_by_rotation(heading, rotation):
+    """ 将heading角根据旋转矩阵从一个坐标系转到另一个坐标系
+    heading:
+    rotation
+    """
+    rotation = Rotation.from_matrix(rotation)
+    yaw = np.ones_like(heading) * rotation.as_euler('zyx')[0]
+    heading = heading + yaw
+    return heading
 
 
 def matrix_to_string(matrix):
@@ -251,6 +262,17 @@ class AicvCalibration(object):
         with open(kitti_calib_file_path, 'w') as f:
             for line in kitti_calib_param:
                 f.write(line + '\n')
+
+    def trans_heading_from_aicv_to_kitti(self, heading):
+        """ 将heading角根据旋转矩阵从一个坐标系转到另一个坐标系
+        eg.
+            heading: lidar坐标系下的航向角
+            lidar2cam: lidar坐标系到cam坐标系的变换矩阵
+        """
+        rotation = Rotation.from_matrix(self.lidar2cam[:3, :3])
+        yaw = np.ones_like(heading) * rotation.as_euler('zyx')[0]
+        heading = heading + yaw
+        return heading
 
     # ===========================
     # ------- 3d to 3d ----------

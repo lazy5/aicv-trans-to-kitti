@@ -106,12 +106,11 @@ def trans_label_file(aicv_infos_dict, sample_idx, kitti_path):
                 occluded_i = 0 #tips: 表示该障碍物是否可见，0全部可见，1部分遮挡，2大部分遮挡，3不清楚
                 alpha_i = 0 # TODO: 该值表示障碍物的观测角，对nerf无用
                 bbox_i = [0, 0, 0, 0]
-                dimensions_i = aicv_info['gt_boxes'][i, (5,3,4)] # aicv: lwh -> kitti:hwl ???
+                dimensions_i = aicv_info['gt_boxes'][i, (5,4,3)] # aicv: lwh -> kitti:hwl
                 h = aicv_info['gt_boxes'][i, 5]
                 location_i = kitti_location[i] + np.array([0, h / 2, 0]) # aicv: 3d框的中心点坐标 -> kitti: 3d框的底面中心点坐标
-                # location_i = kitti_location[i]
-                # print('location_i', location_i.shape)
-                rotation_y_i = - reg_radian(aicv_info['gt_boxes'][i, 6]) # ???
+                # rotation_y_i = - reg_radian(aicv_info['gt_boxes'][i, 6]) # ???
+                rotation_y_i = - reg_radian(aicv_calibration.trans_heading_from_aicv_to_kitti(aicv_info['gt_boxes'][i, 6]))
                 score_i = 1
                 write_line(f_kitti_label_file, frame_idx, track_id_i, type_i, truncated_i, occluded_i, alpha_i, 
                         bbox_i, dimensions_i, location_i, rotation_y_i, score_i)
