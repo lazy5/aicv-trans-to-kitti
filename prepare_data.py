@@ -57,7 +57,7 @@ def trans_lidar_file(file_path, aicv_infos_dict, idx, kitti_path):
 
 
 def trans_img_file(file_path, aicv_infos_dict, idx, kitti_path):
-    kitti_img_file_path = os.path.join(kitti_path, 'image_02/0001', "%06d.jpg" % (idx))
+    kitti_img_file_path = os.path.join(kitti_path, 'image_02/0001', "%06d.png" % (idx))
     mkdir(kitti_img_file_path)
     shutil.move(file_path, kitti_img_file_path)
     aicv_infos_dict[idx]['image_file_path'] = kitti_img_file_path
