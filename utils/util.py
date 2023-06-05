@@ -187,9 +187,11 @@ class AicvCalibration(object):
     cam2lidar: np.array(3,4) 相机坐标系到lidar坐标系的变换矩阵
     lidar2cam: np.array(3,4) lidar坐标系到相机坐标系的变换矩阵
     """
-    def __init__(self, aicv_calib_file_path, cam_name):
+    def __init__(self, aicv_calib_file_path, cam_name, scale=None):
         self.aicv_cam_name = cam_name
         self._parse_aicv_calib_file(aicv_calib_file_path)
+        if scale is not None:
+            self.cam_K[:2, :] = scale * self.cam_K[:2, :]
     
     def read_aicv_calib_file(self, aicv_calib_file_path):
         """ 读取aicv数据的param.txt文件 """

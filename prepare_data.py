@@ -15,6 +15,7 @@ import concurrent.futures as futures
 
 import pandas as pd
 import numpy as np
+import cv2
 
 from utils.util import load_pcd, reg_radian, AicvCalibration, box3d_pts_2d_to_bbox_2d
 from utils.kitti_util import boxes_to_corners_3d
@@ -67,10 +68,17 @@ def trans_lidar_file(file_path, aicv_infos_dict, idx, kitti_path):
     aicv_infos_dict[idx]['lidar_file_path'] = kitti_lidar_file_path
 
 
-def trans_img_file(file_path, aicv_infos_dict, idx, kitti_path):
+def trans_img_file(file_path, aicv_infos_dict, idx, kitti_path, new_size=(1280, 720)):
     kitti_img_file_path = os.path.join(kitti_path, 'image_02/0001', "%06d.png" % (idx))
     mkdir(kitti_img_file_path)
-    shutil.move(file_path, kitti_img_file_path)
+    # shutil.move(file_path, kitti_img_file_path)
+    # 对图像进行缩放
+    image = cv2.imread(file_path)
+    resized_image = cv2.resize(image, new_size)
+    cv2.imwrite(kitti_img_file_path, resized_image)
+
+    mkdir(kitti_img_file_path.replace('image_02', 'image_03'))
+    shutil.copy(kitti_img_file_path, kitti_img_file_path.replace('image_02', 'image_03'))
     aicv_infos_dict[idx]['image_file_path'] = kitti_img_file_path
 
 
@@ -117,12 +125,12 @@ def trans_label_file(aicv_infos_dict, sample_idx, kitti_path):
     aicv_infos_dict[sample_idx]['label_file_path'] = kitti_label_file_path
 
 
-def trans_calib_file(calib_file_path, aicv_infos_dict, sample_idx, kitti_path):
+def trans_calib_file(calib_file_path, aicv_infos_dict, sample_idx, kitti_path, scale=1/3):
     kitti_calib_file_path = os.path.join(kitti_path, 'calib/0001.txt')
     mkdir(kitti_calib_file_path)
 
     # 解析aicv文件，输出一个kitti-mot格式文件
-    aicv_calib = AicvCalibration(calib_file_path, 'obstacle')
+    aicv_calib = AicvCalibration(calib_file_path, 'obstacle', scale=scale) # 将图像缩放为原来1/3的同时，也要将内参进行缩放
     aicv_calib.write_to_kitti_calib_file(kitti_calib_file_path)
     aicv_infos_dict[sample_idx]['calibration'] = aicv_calib
 
@@ -182,12 +190,12 @@ def process_temp_dir(aicv_infos_dict, kitti_path, num_workers=16):
         pcd_file_path = os.path.join(temp_dir.name, 'velodyne_points/at128_fusion.pcd')
         trans_lidar_file(pcd_file_path, aicv_infos_dict, sample_idx, kitti_path) # 处理lidar数据
         img_file_path = os.path.join(temp_dir.name, 'images/obstacle/image.jpg')
-        trans_img_file(img_file_path, aicv_infos_dict, sample_idx, kitti_path) # 处理图像数据
+        trans_img_file(img_file_path, aicv_infos_dict, sample_idx, kitti_path, (1280, 720)) # 处理图像数据, 将图像缩放为原来的1/3
         pose_file_path = os.path.join(temp_dir.name, 'velodyne_points/pose.txt')
         trans_oxts_file(pose_file_path, aicv_infos_dict, sample_idx, kitti_path)
         if sample_idx == 0: # 对于标定文件和label文件，将输出单个整合文件
             calib_file_path = os.path.join(temp_dir.name, 'params/params.txt')
-            trans_calib_file(calib_file_path, aicv_infos_dict, sample_idx, kitti_path) # 处理相机和激光雷达内外参数据
+            trans_calib_file(calib_file_path, aicv_infos_dict, sample_idx, kitti_path, scale=1/3) # 处理相机和激光雷达内外参数据
             trans_label_file(aicv_infos_dict, sample_idx, kitti_path) # 处理label数据
 
         temp_dir.cleanup()
